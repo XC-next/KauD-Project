@@ -1,0 +1,60 @@
+{
+  "entities": {
+    "users": {
+      "title": "User Profile",
+      "description": "User profile information and settings",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "displayName": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "lastLogin": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email"]
+    },
+    "sessions": {
+      "title": "Chat Session",
+      "description": "A conversation session belonging to a user",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "title": { "type": "string" },
+        "lastUpdated": { "type": "string", "format": "date-time" },
+        "systemPrompt": { "type": "string" },
+        "summary": { "type": "string" }
+      },
+      "required": ["id", "userId", "title", "lastUpdated"]
+    },
+    "messages": {
+      "title": "Message",
+      "description": "An individual message within a session",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "sessionId": { "type": "string" },
+        "userId": { "type": "string" },
+        "role": { "type": "string", "enum": ["user", "assistant"] },
+        "content": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "sessionId", "userId", "role", "content", "timestamp"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "users",
+      "description": "Individual user profile documents"
+    },
+    "/users/{userId}/sessions/{sessionId}": {
+      "schema": "sessions",
+      "description": "Chat sessions belonging to a specific user"
+    },
+    "/users/{userId}/sessions/{sessionId}/messages/{messageId}": {
+      "schema": "messages",
+      "description": "Messages within a specific session"
+    }
+  }
+}

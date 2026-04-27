@@ -1,0 +1,121 @@
+@import "tailwindcss";
+@plugin "@tailwindcss/typography";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  
+  --color-brand-bg: var(--bg-color);
+  --color-brand-text: var(--text-color);
+  --color-brand-sidebar: var(--sidebar-bg);
+  --color-brand-border: var(--border-color);
+  --color-brand-accent: var(--accent-color);
+  --color-brand-muted: var(--muted-color);
+}
+
+@layer base {
+  :root {
+    --bg-color: #F5F5F4;
+    --text-color: #1C1917;
+    --sidebar-bg: #FFFFFF;
+    --border-color: #E7E5E4;
+    --accent-color: #0C0A09;
+    --muted-color: #78716C;
+  }
+
+  [data-theme='dark'] {
+    --bg-color: #0C0A09;
+    --text-color: #F5F5F4;
+    --sidebar-bg: #1C1917;
+    --border-color: #262626;
+    --accent-color: #FFFFFF;
+    --muted-color: #A1A1AA;
+  }
+
+  [data-theme='midnight'] {
+    --bg-color: #020617;
+    --text-color: #F8FAFC;
+    --sidebar-bg: #0F172A;
+    --border-color: #1E293B;
+    --accent-color: #38BDF8;
+    --muted-color: #94A3B8;
+  }
+
+  [data-theme='forest'] {
+    --bg-color: #052e16;
+    --text-color: #f0fdf4;
+    --sidebar-bg: #064e3b;
+    --border-color: #14532d;
+    --accent-color: #4ade80;
+    --muted-color: #86efac;
+  }
+
+  * {
+    border-color: var(--border-color);
+  }
+  
+  body {
+    background-color: var(--bg-color);
+    color: var(--text-color);
+    @apply antialiased transition-colors duration-300;
+  }
+
+  .prose p {
+    @apply font-medium leading-relaxed;
+    color: var(--text-color);
+    margin-bottom: 1rem;
+  }
+
+  .prose strong {
+    @apply font-bold;
+    color: var(--accent-color);
+  }
+
+  .prose h1, .prose h2, .prose h3, .prose h4 {
+    @apply font-black uppercase tracking-tight;
+    color: var(--accent-color);
+    margin-top: 2rem;
+    margin-bottom: 1rem;
+  }
+
+  .prose h1 { @apply text-xl border-l-4 border-brand-accent pl-3; }
+  .prose h2 { @apply text-lg; }
+  .prose h3 { @apply text-base; }
+
+  .prose ul, .prose ol {
+    @apply space-y-2 mb-4;
+  }
+
+  .prose li {
+    @apply pl-1;
+  }
+
+  .prose blockquote {
+    @apply border-l-4 border-brand-border pl-4 italic opacity-80 py-1;
+  }
+
+  .prose hr {
+    @apply border-brand-border my-8;
+  }
+
+  .prose a {
+    @apply text-brand-accent underline underline-offset-4 decoration-current/30 hover:decoration-current transition-all;
+  }
+
+  /* Custom Scrollbar */
+  ::-webkit-scrollbar {
+    width: 6px;
+  }
+  
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  
+  ::-webkit-scrollbar-thumb {
+    background-color: var(--border-color);
+    @apply rounded-full;
+  }
+  
+  ::-webkit-scrollbar-thumb:hover {
+    @apply opacity-80;
+  }
+}

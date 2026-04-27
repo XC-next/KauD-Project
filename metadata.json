@@ -1,0 +1,5 @@
+{
+  "name": "KauD Assistant",
+  "description": "A Knowledge and Utility Design assistant powered by Gemini for precise and efficient task management.",
+  "requestFramePermissions": ["camera", "microphone"]
+}
