@@ -1,10 +1,10 @@
 {
-  "projectId": "gen-lang-client-0013180754",
-  "appId": "1:342290973039:web:45ae025588954fb546289a",
-  "apiKey": "AIzaSyA66a3-OJ8FyrsyzyvcoblKuO0AakTWX74",
-  "authDomain": "gen-lang-client-0013180754.firebaseapp.com",
+  "projectId": "kuad-project",
+  "appId": "1:132886922341:web:1a0a8baa5bfd8d701a328c",
+  "apiKey": "AIzaSyBEmxSDaDQfbnBh65M6PhbnwMwOFeJ5RLc",
+  "authDomain": "kuad-project.firebaseapp.com",
   "firestoreDatabaseId": "ai-studio-9ca95977-50a8-4b28-8281-9f807ef8c7fc",
-  "storageBucket": "gen-lang-client-0013180754.firebasestorage.app",
-  "messagingSenderId": "342290973039",
+  "storageBucket": "kuad-project.firebasestorage.app",
+  "messagingSenderId": "132886922341",
   "measurementId": ""
 }
