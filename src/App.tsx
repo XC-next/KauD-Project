@@ -76,31 +76,31 @@ const getPersonaNameKey = (id: string) => {
 const PERSONAS = [
   { 
     id: "default", 
-    name: "បទដ្ឋាន", 
+    name: "Standard", 
     icon: <Bot className="w-3.5 h-3.5" />, 
     instruction: "You are KauD Assistant, a Knowledge and Utility Design assistant. You are precise, efficient, and helpful. Focus on providing high-quality assistance in Khmer." 
   },
   { 
     id: "creative", 
-    name: "ការច្នៃប្រឌិត", 
+    name: "Creative", 
     icon: <Sparkles className="w-3.5 h-3.5 text-purple-400" />, 
     instruction: "You are a creative muse. Your responses are imaginative, descriptive, and focus on storytelling and out-of-the-box thinking. Express your creativity in Khmer." 
   },
   { 
     id: "coder", 
-    name: "អ្នកអភិវឌ្ឍន៍", 
+    name: "Developer", 
     icon: <Code className="w-3.5 h-3.5 text-blue-400" />, 
     instruction: "You are an expert software engineer. Provide code-first solutions, explain architectural patterns, and prioritize best practices and efficiency. Explain technical concepts clearly in Khmer." 
   },
   { 
     id: "analyst", 
-    name: "អ្នកវិភាគ", 
+    name: "Analyst", 
     icon: <Brain className="w-3.5 h-3.5 text-green-400" />, 
     instruction: "You are a data-driven analyst. Focus on facts, structured breakdowns, pros and cons, and logical reasoning. Present your analysis accurately in Khmer." 
   },
   { 
     id: "minimal", 
-    name: "សាមញ្ញបំផុត", 
+    name: "Minimal", 
     icon: <ZapOff className="w-3.5 h-3.5 text-orange-400" />, 
     instruction: "You are a minimalist assistant. Be extremely concise. Use as few words as possible while remaining helpful. Keep it brief in Khmer." 
   }
@@ -147,14 +147,7 @@ export default function App() {
       {
         id: "default",
         title: translations[initLanguage].newSession,
-        messages: [
-          {
-            id: "welcome",
-            role: "assistant",
-            content: translations[initLanguage].welcomeBody,
-            timestamp: new Date().toISOString(),
-          },
-        ],
+        messages: [],
         lastUpdated: new Date().toISOString(),
       },
     ];
@@ -277,14 +270,7 @@ export default function App() {
     const newSession: Session = {
       id: Date.now().toString(),
       title: t.newSession,
-      messages: [
-        {
-          id: "welcome-" + Date.now(),
-          role: "assistant",
-          content: t.welcomeBody,
-          timestamp: new Date().toISOString(),
-        },
-      ],
+      messages: [],
       lastUpdated: new Date().toISOString(),
     };
     setSessions((prev) => [newSession, ...prev]);
@@ -304,14 +290,7 @@ export default function App() {
           const newSession: Session = {
             id: Date.now().toString(),
             title: t.newSession,
-            messages: [
-              {
-                id: "welcome-" + Date.now(),
-                role: "assistant",
-                content: t.welcomeBody,
-                timestamp: new Date().toISOString(),
-              },
-            ],
+            messages: [],
             lastUpdated: new Date().toISOString(),
           };
           setActiveSessionId(newSession.id);
@@ -1039,65 +1018,51 @@ export default function App() {
         )}
 
         {/* Chat Area */}
-        <div className="flex-1 overflow-y-auto p-4 lg:p-8 space-y-6 scroll-smooth">
-          <div className="max-w-3xl mx-auto w-full space-y-8">
+        <div className={cn(
+          "overflow-y-auto p-4 lg:p-8 scroll-smooth flex flex-col",
+          activeSession.messages.length === 0 ? "flex-1 items-center justify-center p-0" : "flex-1 space-y-6"
+        )}>
+          <div className={cn(
+            "max-w-3xl mx-auto w-full",
+            activeSession.messages.length === 0 ? "flex flex-col items-center justify-center flex-1 h-full min-h-0" : "space-y-8"
+          )}>
             {activeSession.messages.length === 0 ? (
-              <div className="h-full flex flex-col items-center justify-center py-12 text-center space-y-12">
+              <div className="w-full flex justify-center flex-col items-center text-center pb-8 lg:pb-12 mt-auto">
                 <motion.div
-                  initial={{ scale: 0.8, opacity: 0 }}
+                  initial={{ scale: 0.95, opacity: 0 }}
                   animate={{ scale: 1, opacity: 1 }}
-                  className="relative"
+                  transition={{ duration: 0.4 }}
+                  className="mb-10"
                 >
-                  <div className="w-24 h-24 rounded-[2rem] bg-gradient-to-br from-[#FF6321] to-[#E5591D] flex items-center justify-center text-white shadow-2xl shadow-[#FF6321]/20 relative z-10 mx-auto">
-                    <History className="w-10 h-10 animate-pulse" />
-                  </div>
-                  <div className="absolute inset-0 bg-[#FF6321] blur-3xl opacity-20 -z-0 scale-150" />
+                  <h2 className="text-3xl md:text-5xl font-bold tracking-tight text-brand-text mb-3">
+                    {user ? `${t.greetingUser}${user.displayName?.split(' ')[0] || user.email?.split('@')[0]}!` : `${t.greeting}!`}
+                  </h2>
+                  <p className="text-lg md:text-xl font-medium text-brand-muted">
+                    {t.howCanIHelp} <span className="text-[#FF6321]">{t.today}</span>
+                  </p>
                 </motion.div>
 
-                <div className="space-y-4">
-                  <motion.h2 
-                    initial={{ y: 20, opacity: 0 }}
-                    animate={{ y: 0, opacity: 1 }}
-                    transition={{ delay: 0.1 }}
-                    className="text-4xl md:text-5xl font-black tracking-tighter text-brand-text flex flex-wrap justify-center gap-x-3"
-                  >
-                    <span>{t.howCanIHelp}</span> 
-                    <span className="text-[#FF6321]">{t.today}</span>
-                  </motion.h2>
-                  <motion.p 
-                    initial={{ y: 20, opacity: 0 }}
-                    animate={{ y: 0, opacity: 1 }}
-                    transition={{ delay: 0.2 }}
-                    className="text-brand-muted text-lg font-medium max-w-md mx-auto"
-                  >
-                    {t.technicalAssistant}
-                  </motion.p>
-                </div>
-
                 <motion.div 
-                  initial={{ y: 30, opacity: 0 }}
+                  initial={{ y: 20, opacity: 0 }}
                   animate={{ y: 0, opacity: 1 }}
-                  transition={{ delay: 0.3 }}
-                  className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full pt-8"
+                  transition={{ delay: 0.2 }}
+                  className="grid grid-cols-1 md:grid-cols-2 gap-3 w-full max-w-2xl px-4"
                 >
                   {[
-                    { title: "Creative Logic", desc: t.feature1Desc, icon: <Terminal className="w-5 h-5" /> },
-                    { title: "Smart Summary", desc: t.feature2Desc, icon: <Zap className="w-5 h-5" /> },
-                    { title: "Technical Vision", desc: t.feature3Desc, icon: <ImageIcon className="w-5 h-5" /> },
-                    { title: "Neural Chat", desc: t.feature4Desc, icon: <Layers className="w-5 h-5" /> }
+                    { title: t.feature1Desc, prompt: t.feature1Desc, icon: <Terminal className="w-4 h-4" /> },
+                    { title: t.feature2Desc, prompt: t.feature2Desc, icon: <Zap className="w-4 h-4" /> },
+                    { title: t.feature3Desc, prompt: t.feature3Desc, icon: <ImageIcon className="w-4 h-4" /> },
+                    { title: t.feature4Desc, prompt: t.feature4Desc, icon: <Layers className="w-4 h-4" /> }
                   ].map((feature, i) => (
                     <button
                       key={i}
-                      onClick={() => setInput(`${t.tellMeMore}${feature.title}`)}
-                      className="group p-6 bg-brand-sidebar border border-brand-border rounded-[2rem] text-left hover:border-[#FF6321] hover:bg-brand-bg transition-all active:scale-95 flex flex-col gap-3 shadow-sm"
+                      onClick={() => handleSendWithContent(feature.prompt)}
+                      className="group flex items-center gap-3 p-4 bg-white dark:bg-brand-sidebar border border-transparent hover:border-[#FF6321]/30 rounded-2xl text-left transition-all active:scale-95 shadow-sm hover:shadow-md"
                     >
-                      <div className="w-10 h-10 rounded-xl bg-brand-bg border border-brand-border flex items-center justify-center text-[#FF6321] group-hover:scale-110 group-hover:bg-[#FF6321]/10 transition-all">
+                      <div className="w-10 h-10 rounded-xl bg-[#FF6321]/10 flex items-center justify-center text-[#FF6321] group-hover:scale-110 transition-transform">
                         {feature.icon}
                       </div>
-                      <div>
-                        <h4 className="font-bold text-brand-text group-hover:text-[#FF6321] transition-colors">{feature.title}</h4>
-                        <p className="text-xs text-brand-muted font-medium">{feature.desc}</p>
-                      </div>
+                      <span className="text-sm font-semibold text-brand-text leading-tight">{feature.title}</span>
                     </button>
                   ))}
                 </motion.div>
@@ -1205,7 +1170,7 @@ export default function App() {
                   >
                     <div className="h-full bg-[#FF6321] w-1/3" />
                   </motion.div>
-                  <p className="text-[10px] text-brand-muted animate-pulse font-bold uppercase tracking-tighter">កំពុងគិត...</p>
+                  <p className="text-[10px] text-brand-muted animate-pulse font-bold uppercase tracking-tighter">{t.thinking}</p>
                 </div>
               </motion.div>
             )}
@@ -1214,7 +1179,12 @@ export default function App() {
         </div>
 
         {/* Input Area */}
-        <div className="p-4 lg:p-8 bg-gradient-to-t from-brand-bg via-brand-bg to-transparent">
+        <div className={cn(
+          "transition-all",
+          activeSession.messages.length === 0 
+            ? "pb-8 lg:pb-12 px-4 w-full"
+            : "p-4 lg:p-8 bg-gradient-to-t from-brand-bg via-brand-bg to-transparent"
+        )}>
           <div className="max-w-3xl mx-auto relative space-y-3">
             {/* File Previews */}
             {uploadedFiles.length > 0 && (
@@ -1248,7 +1218,7 @@ export default function App() {
                     <button 
                       onClick={() => setUploadedFiles(prev => prev.filter((_, idx) => idx !== i))}
                       className="absolute right-1 top-1/2 -translate-y-1/2 p-1 hover:bg-red-500/10 hover:text-red-500 rounded-md text-brand-muted opacity-0 group-hover:opacity-100 transition-all bg-brand-sidebar/90 backdrop-blur-sm border border-transparent hover:border-red-500/20 shadow-sm"
-                      title="លុប"
+                      title={t.delete}
                     >
                       <X className="w-3 h-3" />
                     </button>
@@ -1277,7 +1247,7 @@ export default function App() {
               ))}
             </div>
 
-            <div className="relative flex items-end gap-2 bg-brand-sidebar border border-brand-border rounded-2xl p-2 shadow-lg focus-within:ring-2 focus-within:ring-[#FF6321]/20 transition-all">
+            <div className="relative flex items-end gap-2 bg-brand-sidebar border border-brand-border rounded-[2rem] px-3 py-2 md:px-4 md:py-3 shadow-lg focus-within:ring-2 focus-within:ring-[#FF6321]/20 transition-all">
               {/* File input (Hidden) */}
               <input 
                 type="file" 

@@ -53,6 +53,8 @@ export const translations = {
     sessionSummary: "SESSION SUMMARY:",
     howCanIHelp: "How can I help you",
     today: "today?",
+    greeting: "Hello",
+    greetingUser: "Hello, ",
     technicalAssistant: "Advanced technical assistant for all your tasks.",
     disclaimer: "KauD Assistant can make mistakes. Please verify important information.",
     themeLight: "Light",
@@ -63,7 +65,10 @@ export const translations = {
     sysPromptPlaceholder: "Enter system instructions...",
     back: "Back",
     summaryTitle: "Summary",
-    activity: "Activity"
+    activity: "Activity",
+    thinking: "Thinking...",
+    delete: "Delete",
+    remove: "Remove"
   },
   km: {
     welcomeBody: "សួស្តី! ខ្ញុំគឺ **KauD Assistant** ជាជំនួយការរចនាចំណេះដឹង និងឧបករណ៍ប្រើប្រាស់របស់អ្នក។ តើខ្ញុំអាចជួយអ្នកក្នុងការរចនាដំណោះស្រាយ ឬសិក្សាអំពីប្រធានបទអ្វីខ្លះនៅថ្ងៃនេះ?",
@@ -117,6 +122,8 @@ export const translations = {
     sessionSummary: "សេចក្តីសង្ខេបនៃសម័យជជែក:",
     howCanIHelp: "តើខ្ញុំអាចជួយអ្វីខ្លះ",
     today: "ថ្ងៃនេះ?",
+    greeting: "សួស្តី",
+    greetingUser: "សួស្តី, ",
     technicalAssistant: "ជំនួយការបច្ចេកទេស កម្រិតខ្ពស់សម្រាប់គ្រប់ការងាររបស់អ្នក។",
     disclaimer: "KauD Assistant អាចមានកំហុស។ សូមផ្ទៀងផ្ទាត់ព័ត៌មានសំខាន់ៗ។",
     themeLight: "ពន្លឺ",
@@ -127,6 +134,9 @@ export const translations = {
     sysPromptPlaceholder: "បញ្ចូលការណែនាំប្រព័ន្ធជំនួយការ...",
     back: "ថយក្រោយ",
     summaryTitle: "ការសង្ខេប (Summary)",
-    activity: "សកម្មភាព"
+    activity: "សកម្មភាព",
+    thinking: "កំពុងគិត...",
+    delete: "លុប",
+    remove: "ដកចេញ"
   }
 };
