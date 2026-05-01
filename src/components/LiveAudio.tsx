@@ -19,6 +19,7 @@ export const LiveAudio: React.FC<LiveAudioProps> = ({ isOpen, onClose }) => {
   const [isMuted, setIsMuted] = useState(false);
   const [transcription, setTranscription] = useState<string>("");
   const [aiResponse, setAiResponse] = useState<string>("");
+  const [error, setError] = useState<string | null>(null);
   
   const audioContextRef = useRef<AudioContext | null>(null);
   const microphoneRef = useRef<MediaStreamAudioSourceNode | null>(null);
@@ -31,8 +32,18 @@ export const LiveAudio: React.FC<LiveAudioProps> = ({ isOpen, onClose }) => {
 
   const startSession = async () => {
     try {
+      setError(null);
+      const apiKey = process.env.GEMINI_API_KEY;
+      if (!apiKey || apiKey.length < 5) {
+        const msg = "Live Audio Error: Gemini API Key is missing or too short.";
+        console.error(msg);
+        setError(msg);
+        setIsConnecting(false);
+        return;
+      }
+
       setIsConnecting(true);
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
+      const ai = new GoogleGenAI({ apiKey });
       
       const sessionPromise = ai.live.connect({
         model: "gemini-3.1-flash-live-preview",
@@ -49,7 +60,8 @@ export const LiveAudio: React.FC<LiveAudioProps> = ({ isOpen, onClose }) => {
           onopen: () => {
             setIsConnecting(false);
             setIsActive(true);
-            setupMicrophone();
+            setError(null);
+            setupMicrophone(sessionPromise);
             startSpeechRecognition();
           },
           onmessage: async (message: any) => {
@@ -77,11 +89,18 @@ export const LiveAudio: React.FC<LiveAudioProps> = ({ isOpen, onClose }) => {
               setAiResponse(prev => prev + modelTranscript);
             }
           },
-          onerror: (error) => {
-            console.error("Live API Error:", error);
+          onerror: (err) => {
+            console.error("Live API Error (onerror):", err);
+            let errorMessage = "Connection failed";
+            if (err instanceof Error) {
+              errorMessage = err.message;
+              console.error("Error Message:", err.message);
+            }
+            setError(`Audio Session Error: ${errorMessage}. Please check your connection.`);
             stopSession();
           },
-          onclose: () => {
+          onclose: (event) => {
+            console.log("Live Audio session closed:", event);
             setIsActive(false);
             stopSession();
           }
@@ -89,8 +108,14 @@ export const LiveAudio: React.FC<LiveAudioProps> = ({ isOpen, onClose }) => {
       });
 
       sessionRef.current = await sessionPromise;
-    } catch (error) {
-      console.error("Failed to start Live Audio session:", error);
+    } catch (err) {
+      console.error("Failed to start Live Audio session (catch):", err);
+      let errorMessage = "Unknown error";
+      if (err instanceof Error) {
+        errorMessage = err.message;
+        console.error("Error Message:", err.message);
+      }
+      setError(`Audio Initialization Failed: ${errorMessage}`);
       setIsConnecting(false);
     }
   };
@@ -120,7 +145,7 @@ export const LiveAudio: React.FC<LiveAudioProps> = ({ isOpen, onClose }) => {
     speechRecognitionRef.current = recognition;
   };
 
-  const setupMicrophone = async () => {
+  const setupMicrophone = async (sessionPromise: Promise<any>) => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
@@ -130,7 +155,7 @@ export const LiveAudio: React.FC<LiveAudioProps> = ({ isOpen, onClose }) => {
       processorRef.current = audioContextRef.current.createScriptProcessor(4096, 1, 1);
       
       processorRef.current.onaudioprocess = (e) => {
-        if (isMuted || !sessionRef.current) return;
+        if (isMuted) return;
         
         const inputData = e.inputBuffer.getChannelData(0);
         const pcmData = new Int16Array(inputData.length);
@@ -139,9 +164,13 @@ export const LiveAudio: React.FC<LiveAudioProps> = ({ isOpen, onClose }) => {
         }
         
         const base64Data = btoa(String.fromCharCode(...new Uint8Array(pcmData.buffer)));
-        sessionRef.current.sendRealtimeInput({
-          audio: { data: base64Data, mimeType: 'audio/pcm;rate=16000' }
-        });
+        sessionPromise.then((session) => {
+          if (session) {
+            session.sendRealtimeInput({
+              audio: { data: base64Data, mimeType: 'audio/pcm;rate=16000' }
+            });
+          }
+        }).catch(err => console.error("Error sending audio input:", err));
       };
       
       microphoneRef.current.connect(processorRef.current);
@@ -343,8 +372,8 @@ export const LiveAudio: React.FC<LiveAudioProps> = ({ isOpen, onClose }) => {
             <div className="px-8 pb-8 space-y-4">
               <div className="bg-black/50 border border-brand-border rounded-2xl p-4 h-24 overflow-y-auto font-mono text-[10px]">
                 <div className="text-[#FF6321] mb-1 tracking-widest uppercase opacity-70">Model_Output:</div>
-                <div className="text-brand-text leading-relaxed">
-                  {aiResponse || "Waiting for signal..."}
+                <div className={cn("leading-relaxed", error ? "text-red-400" : "text-brand-text")}>
+                  {error || aiResponse || "Waiting for signal..."}
                 </div>
               </div>
 

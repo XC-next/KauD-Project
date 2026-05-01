@@ -18,6 +18,7 @@ export const LiveVideo: React.FC<LiveVideoProps> = ({ isOpen, onClose }) => {
   const [isActive, setIsActive] = useState(false);
   const [transcription, setTranscription] = useState<string>("");
   const [aiResponse, setAiResponse] = useState<string>("");
+  const [error, setError] = useState<string | null>(null);
   const [isCamerOn, setIsCameraOn] = useState(true);
   
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -34,8 +35,18 @@ export const LiveVideo: React.FC<LiveVideoProps> = ({ isOpen, onClose }) => {
 
   const startSession = async () => {
     try {
+      setError(null);
+      const apiKey = process.env.GEMINI_API_KEY;
+      if (!apiKey || apiKey.length < 5) {
+        const msg = "Live Video Error: Gemini API Key is missing or too short.";
+        console.error(msg);
+        setError(msg);
+        setIsConnecting(false);
+        return;
+      }
+
       setIsConnecting(true);
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
+      const ai = new GoogleGenAI({ apiKey });
       
       const sessionPromise = ai.live.connect({
         model: "gemini-3.1-flash-live-preview",
@@ -52,7 +63,8 @@ export const LiveVideo: React.FC<LiveVideoProps> = ({ isOpen, onClose }) => {
           onopen: () => {
             setIsConnecting(false);
             setIsActive(true);
-            setupMedia();
+            setError(null);
+            setupMedia(sessionPromise);
             startSpeechRecognition();
           },
           onmessage: async (message: any) => {
@@ -75,19 +87,33 @@ export const LiveVideo: React.FC<LiveVideoProps> = ({ isOpen, onClose }) => {
             // Note: We use Web Speech API (SpeechRecognition) instead of message.realtimeInputTranscription 
             // for more robust Khmer support and continuous transcription updating.
           },
-          onerror: (error) => {
-            console.error("Live Video Error:", error);
+          onerror: (err) => {
+            console.error("Live Video Error (onerror):", err);
+            let errorMessage = "Network or Connection Error";
+            if (err instanceof Error) {
+              errorMessage = err.message;
+              console.error("Error Message:", err.message);
+              console.error("Error Stack:", err.stack);
+            }
+            setError(`Connection Failed: ${errorMessage}. Please check your network or API key permissions.`);
             stopSession();
           },
-          onclose: () => {
+          onclose: (event) => {
+            console.log("Live Video session closed:", event);
             stopSession();
           }
         }
       });
 
       sessionRef.current = await sessionPromise;
-    } catch (error) {
-      console.error("Failed to start Live Video session:", error);
+    } catch (err) {
+      console.error("Failed to start Live Video session (catch):", err);
+      let errorMessage = "Unknown error";
+      if (err instanceof Error) {
+        errorMessage = err.message;
+        console.error("Error Message:", err.message);
+      }
+      setError(`Session Initiation Failed: ${errorMessage}`);
       setIsConnecting(false);
     }
   };
@@ -117,7 +143,7 @@ export const LiveVideo: React.FC<LiveVideoProps> = ({ isOpen, onClose }) => {
     speechRecognitionRef.current = recognition;
   };
 
-  const setupMedia = async () => {
+  const setupMedia = async (sessionPromise: Promise<any>) => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ 
         audio: true, 
@@ -133,16 +159,20 @@ export const LiveVideo: React.FC<LiveVideoProps> = ({ isOpen, onClose }) => {
       processorRef.current = audioContextRef.current.createScriptProcessor(4096, 1, 1);
       
       processorRef.current.onaudioprocess = (e) => {
-        if (!sessionRef.current) return;
         const inputData = e.inputBuffer.getChannelData(0);
         const pcmData = new Int16Array(inputData.length);
         for (let i = 0; i < inputData.length; i++) {
           pcmData[i] = Math.max(-1, Math.min(1, inputData[i])) * 0x7FFF;
         }
         const base64Data = btoa(String.fromCharCode(...new Uint8Array(pcmData.buffer)));
-        sessionRef.current.sendRealtimeInput({
-          audio: { data: base64Data, mimeType: 'audio/pcm;rate=16000' }
-        });
+        
+        sessionPromise.then((session) => {
+          if (session) {
+            session.sendRealtimeInput({
+              audio: { data: base64Data, mimeType: 'audio/pcm;rate=16000' }
+            });
+          }
+        }).catch(err => console.error("Error sending audio input:", err));
       };
       
       microphoneRef.current.connect(processorRef.current);
@@ -155,14 +185,18 @@ export const LiveVideo: React.FC<LiveVideoProps> = ({ isOpen, onClose }) => {
       canvas.height = 240;
 
       videoIntervalRef.current = setInterval(() => {
-        if (!sessionRef.current || !videoRef.current || !isCamerOn) return;
+        if (!isCamerOn || !videoRef.current) return;
         
         ctx?.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
         const base64Data = canvas.toDataURL('image/jpeg', 0.6).split(',')[1];
         
-        sessionRef.current.sendRealtimeInput({
-          video: { data: base64Data, mimeType: 'image/jpeg' }
-        });
+        sessionPromise.then((session) => {
+          if (session) {
+            session.sendRealtimeInput({
+              video: { data: base64Data, mimeType: 'image/jpeg' }
+            });
+          }
+        }).catch(err => console.error("Error sending video frame:", err));
       }, 500); // 2 FPS for decent low-latency multimodal
       
     } catch (error) {
@@ -322,8 +356,11 @@ export const LiveVideo: React.FC<LiveVideoProps> = ({ isOpen, onClose }) => {
                     <span className="text-[9px] font-mono text-brand-muted uppercase tracking-[0.2em] flex items-center gap-2">
                       <Eye className="w-3 h-3" /> Vision_Analysis
                     </span>
-                    <div className="flex-1 p-4 bg-black/40 border border-brand-border rounded-xl text-xs leading-relaxed overflow-y-auto text-brand-text">
-                      {aiResponse || "Scanning visual field..."}
+                    <div className={cn(
+                      "flex-1 p-4 bg-black/40 border rounded-xl text-xs leading-relaxed overflow-y-auto",
+                      error ? "border-red-500/50 text-red-400" : "border-brand-border text-brand-text"
+                    )}>
+                      {error || aiResponse || "Scanning visual field..."}
                     </div>
                   </div>
                 </div>

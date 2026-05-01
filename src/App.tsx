@@ -34,6 +34,10 @@ import {
   FileText,
   Image as ImageIcon,
   Video,
+  Camera,
+  Mic,
+  User as UserIcon,
+  CircleUser as UserCircle,
   FileCode,
   File,
   Calendar,
@@ -49,7 +53,6 @@ import {
   Database,
   Layers,
   Monitor,
-  Mic,
   Video as VideoIcon,
   Quote,
   ArrowLeft
@@ -58,7 +61,8 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { vscDarkPlus, vs } from "react-syntax-highlighter/dist/esm/styles/prism";
-import { createChat, summarizeMessages, DEFAULT_SYSTEM_INSTRUCTION, AVAILABLE_MODELS } from "./services/gemini";
+import { GoogleGenAI, Modality, LiveServerMessage } from "@google/genai";
+import { ai, createChat, summarizeMessages, DEFAULT_SYSTEM_INSTRUCTION, AVAILABLE_MODELS } from "./services/gemini";
 import { LiveAudio } from "./components/LiveAudio";
 import { LiveVideo } from "./components/LiveVideo";
 import { translations, Language } from "./translations";
@@ -113,6 +117,7 @@ interface Message {
   role: "user" | "assistant";
   content: string;
   timestamp: string; // Changed to string for easier serialization
+  attachments?: { name: string; type: string; content: string }[];
 }
 
 interface Session {
@@ -127,7 +132,7 @@ interface Session {
 import { auth, googleProvider } from "./lib/firebase";
 import { signInWithPopup, signOut } from "firebase/auth";
 import { useAuth } from "./components/AuthProvider";
-import { LogIn, LogOut, UserCircle } from "lucide-react";
+import { LogIn, LogOut } from "lucide-react";
 
 export default function App() {
   const { user, loading: authLoading } = useAuth();
@@ -168,6 +173,513 @@ export default function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [isLiveAudioOpen, setIsLiveAudioOpen] = useState(false);
   const [isLiveVideoOpen, setIsLiveVideoOpen] = useState(false);
+  const [isVisionOpen, setIsVisionOpen] = useState(false);
+
+    // Vision Mode Component
+    const VisionModeView = () => {
+      const videoRef = useRef<HTMLVideoElement>(null);
+      const [stream, setStream] = useState<MediaStream | null>(null);
+      const [isAnalyzing, setIsAnalyzing] = useState(false);
+      const [visionResult, setVisionResult] = useState("");
+      const [error, setError] = useState("");
+      const [isLiveActive, setIsLiveActive] = useState(false);
+      const [liveStatus, setLiveStatus] = useState<"disconnected" | "connecting" | "connected">("disconnected");
+      const [audioLevel, setAudioLevel] = useState(0);
+      const [showFullHistory, setShowFullHistory] = useState(false);
+      
+      const liveSessionRef = useRef<any>(null);
+      const audioContextRef = useRef<AudioContext | null>(null);
+      const audioInputProcessorRef = useRef<ScriptProcessorNode | null>(null);
+      const resultsEndRef = useRef<HTMLDivElement>(null);
+
+      // Auto-scroll transcription
+      useEffect(() => {
+        resultsEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+      }, [visionResult]);
+
+      const startCamera = async () => {
+        try {
+          const mediaStream = await navigator.mediaDevices.getUserMedia({ 
+            video: { 
+              facingMode: 'environment',
+              width: { ideal: 1280 },
+              height: { ideal: 720 }
+            },
+            audio: true 
+          });
+          setStream(mediaStream);
+          if (videoRef.current) {
+            videoRef.current.srcObject = mediaStream;
+          }
+          setError("");
+        } catch (err) {
+          console.error("Camera access error:", err);
+          setError(t.cameraPermissionDenied || "Camera permission denied.");
+        }
+      };
+
+      const stopCamera = () => {
+        if (stream) {
+          stream.getTracks().forEach(track => track.stop());
+          setStream(null);
+        }
+        stopLiveSession();
+      };
+
+      const startLiveSession = async () => {
+        if (liveStatus !== "disconnected") return;
+        
+        setLiveStatus("connecting");
+        setIsLiveActive(true);
+        
+        try {
+          audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
+          
+          const sessionPromise = ai.live.connect({
+            model: "gemini-3.1-flash-live-preview",
+            config: {
+              responseModalities: [Modality.AUDIO],
+              speechConfig: {
+                voiceConfig: { prebuiltVoiceConfig: { voiceName: "Zephyr" } },
+              },
+              systemInstruction: `${selectedPersona.instruction}\n\n${activeSession.systemPrompt || DEFAULT_SYSTEM_INSTRUCTION}\nYou are currently in Vision Live mode. You can hear and "see" the video frames being sent. Respond concisely and helpfully in Khmer. If the user points the camera at something, describe it proactively.`,
+            },
+            callbacks: {
+              onopen: () => {
+                setLiveStatus("connected");
+                startAudioInput(sessionPromise);
+                startVideoStreaming(sessionPromise);
+              },
+              onmessage: async (message: LiveServerMessage) => {
+                // Audio output
+                const audioData = message.serverContent?.modelTurn?.parts?.find(p => p.inlineData)?.inlineData?.data;
+                if (audioData) {
+                  playOutputAudio(audioData);
+                }
+
+                // Transcription
+                const modelTranscription = message.serverContent?.modelTurn?.parts?.find(p => p.text)?.text;
+                if (modelTranscription) {
+                  setVisionResult(prev => prev + (prev ? "\n\n" : "") + modelTranscription);
+                }
+              },
+              onclose: () => {
+                setLiveStatus("disconnected");
+                setIsLiveActive(false);
+              },
+              onerror: (err) => {
+                console.error("Live session error:", err);
+                setLiveStatus("disconnected");
+                setIsLiveActive(false);
+              }
+            }
+          });
+
+          liveSessionRef.current = await sessionPromise;
+        } catch (err) {
+          console.error("Failed to connect live:", err);
+          setLiveStatus("disconnected");
+          setIsLiveActive(false);
+        }
+      };
+
+      const stopLiveSession = () => {
+        if (liveSessionRef.current) {
+          liveSessionRef.current.close();
+          liveSessionRef.current = null;
+        }
+        if (audioInputProcessorRef.current) {
+          audioInputProcessorRef.current.disconnect();
+          audioInputProcessorRef.current = null;
+        }
+        if (audioContextRef.current) {
+          audioContextRef.current.close().catch(() => {});
+          audioContextRef.current = null;
+        }
+        setLiveStatus("disconnected");
+        setIsLiveActive(false);
+        setAudioLevel(0);
+      };
+
+      const startAudioInput = (sessionPromise: Promise<any>) => {
+        if (!stream || !audioContextRef.current) return;
+        
+        const source = audioContextRef.current.createMediaStreamSource(stream);
+        const processor = audioContextRef.current.createScriptProcessor(4096, 1, 1);
+        
+        processor.onaudioprocess = (e) => {
+          if (liveStatus === "connected") {
+            const inputData = e.inputBuffer.getChannelData(0);
+            
+            // Simple audio level detection
+            let sum = 0;
+            for (let i = 0; i < inputData.length; i++) {
+              sum += inputData[i] * inputData[i];
+            }
+            setAudioLevel(Math.sqrt(sum / inputData.length));
+
+            // Convert Float32 to Int16 PCM
+            const pcmData = new Int16Array(inputData.length);
+            for (let i = 0; i < inputData.length; i++) {
+              pcmData[i] = Math.max(-1, Math.min(1, inputData[i])) * 0x7FFF;
+            }
+            // Base64 encoding
+            const base64Data = btoa(String.fromCharCode(...new Uint8Array(pcmData.buffer)));
+            sessionPromise.then((session) => {
+              if (session) {
+                session.sendRealtimeInput({
+                  audio: { data: base64Data, mimeType: 'audio/pcm;rate=16000' }
+                });
+              }
+            }).catch(err => console.error("Error sending audio input:", err));
+          }
+        };
+        
+        source.connect(processor);
+        processor.connect(audioContextRef.current.destination);
+        audioInputProcessorRef.current = processor;
+      };
+
+      const startVideoStreaming = (sessionPromise: Promise<any>) => {
+        const intervalId = setInterval(() => {
+          if (liveStatus === "connected" && videoRef.current) {
+            const canvas = document.createElement('canvas');
+            canvas.width = 480; 
+            canvas.height = (videoRef.current.videoHeight / videoRef.current.videoWidth) * 480;
+            const ctx = canvas.getContext('2d');
+            if (ctx) {
+              ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
+              const base64Data = canvas.toDataURL('image/jpeg', 0.6).split(',')[1];
+              sessionPromise.then((session) => {
+                if (session) {
+                  session.sendRealtimeInput({
+                    video: { data: base64Data, mimeType: 'image/jpeg' }
+                  });
+                }
+              }).catch(err => console.error("Error sending video frame:", err));
+            }
+          } else {
+            clearInterval(intervalId);
+          }
+        }, 800); // 1.25 fps
+      };
+
+      const playOutputAudio = (base64Data: string) => {
+        if (!audioContextRef.current) return;
+        
+        const binaryString = atob(base64Data);
+        const bytes = new Uint8Array(binaryString.length);
+        for (let i = 0; i < binaryString.length; i++) {
+          bytes[i] = binaryString.charCodeAt(i);
+        }
+        
+        const pcmData = new Int16Array(bytes.buffer);
+        const floatData = new Float32Array(pcmData.length);
+        for (let i = 0; i < pcmData.length; i++) {
+          floatData[i] = pcmData[i] / 0x7FFF;
+        }
+        
+        const buffer = audioContextRef.current.createBuffer(1, floatData.length, 16000);
+        buffer.copyToChannel(floatData, 0);
+        
+        const source = audioContextRef.current.createBufferSource();
+        source.buffer = buffer;
+        source.connect(audioContextRef.current.destination);
+        source.start();
+      };
+
+    const handleAnalyze = async () => {
+      if (!videoRef.current || isAnalyzing) return;
+      
+      setIsAnalyzing(true);
+      
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = videoRef.current.videoWidth;
+        canvas.height = videoRef.current.videoHeight;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(videoRef.current, 0, 0);
+          const base64Image = canvas.toDataURL('image/jpeg', 0.8).split(',')[1];
+          
+          // Use chatInstanceRef directly
+          if (!chatInstanceRef.current) {
+            const combinedSystemPrompt = `${selectedPersona.instruction}\n\n${activeSession.systemPrompt || DEFAULT_SYSTEM_INSTRUCTION}`;
+            chatInstanceRef.current = createChat(selectedModelId, combinedSystemPrompt);
+          }
+
+          const result = await chatInstanceRef.current?.sendMessage({
+            message: [
+              { text: "Analyze this image and describe what you see in detail. Keep it helpful and conversational in Khmer." },
+              {
+                inlineData: {
+                  mimeType: "image/jpeg",
+                  data: base64Image
+                }
+              }
+            ]
+          });
+          
+          if (result) {
+            setVisionResult(prev => prev + (prev ? "\n\n---\n\n" : "") + result.text);
+          }
+        }
+      } catch (err) {
+        console.error("Analysis error:", err);
+        setVisionResult(prev => prev + "\n[Error analyzing image]");
+      } finally {
+        setIsAnalyzing(false);
+      }
+    };
+
+    useEffect(() => {
+      startCamera();
+      return () => stopCamera();
+    }, []);
+
+    return (
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className="fixed inset-0 z-[150] bg-brand-bg flex flex-col"
+      >
+        <div className="h-16 shrink-0 border-b border-brand-border bg-brand-sidebar/80 backdrop-blur-md flex items-center justify-between px-4 lg:px-8 z-[160]">
+          <div className="flex items-center gap-3">
+            <button 
+              onClick={() => setIsVisionOpen(false)}
+              className="p-2 hover:bg-brand-bg rounded-xl transition-all"
+            >
+              <X className="w-5 h-5 text-brand-muted" />
+            </button>
+            <div className="flex flex-col">
+              <h2 className="text-sm font-black text-brand-text flex items-center gap-2 leading-tight uppercase tracking-tighter">
+                <Camera className="w-4 h-4 text-[#FF6321]" />
+                {t.visionAssistant}
+              </h2>
+              <div className="flex items-center gap-2">
+                <span className={cn(
+                  "w-1.5 h-1.5 rounded-full",
+                  liveStatus === "connected" ? "bg-green-500 animate-pulse" : "bg-red-500"
+                )} />
+                <p className="text-[10px] text-brand-muted font-bold uppercase tracking-widest">{liveStatus}</p>
+              </div>
+            </div>
+          </div>
+          
+          {/* Audio Viz */}
+          {isLiveActive && liveStatus === "connected" && (
+            <div className="hidden md:flex items-center gap-1">
+              {[...Array(6)].map((_, i) => (
+                <motion.div
+                  key={i}
+                  animate={{ 
+                    height: [4, 4 + (audioLevel * 100), 4],
+                  }}
+                  transition={{ 
+                    duration: 0.2, 
+                    repeat: Infinity,
+                    delay: i * 0.05
+                  }}
+                  className="w-1 bg-[#FF6321] rounded-full"
+                />
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="flex-1 flex flex-col lg:flex-row p-4 lg:p-8 gap-6 overflow-hidden">
+          {/* Camera Viewport */}
+          <div className="flex-1 relative bg-brand-sidebar rounded-[2rem] border border-brand-border shadow-2xl overflow-hidden flex items-center justify-center min-h-[30vh]">
+            {error ? (
+              <div className="flex flex-col items-center gap-4 text-center p-8">
+                <ZapOff className="w-12 h-12 text-red-500 opacity-50" />
+                <p className="text-sm text-brand-muted max-w-xs font-bold leading-relaxed">{error}</p>
+                <button onClick={startCamera} className="px-8 py-3 bg-[#FF6321] text-white rounded-2xl font-black shadow-lg hover:shadow-xl transition-all active:scale-95">{t.retry}</button>
+              </div>
+            ) : (
+              <div className="relative w-full h-full">
+                <video 
+                  ref={videoRef} 
+                  autoPlay 
+                  playsInline 
+                  muted 
+                  className={cn("w-full h-full object-cover", isAnalyzing ? "opacity-40 grayscale" : "transition-all duration-700")}
+                />
+                
+                {/* Scanning Effect Overlay */}
+                {isLiveActive && (
+                  <motion.div 
+                    initial={{ top: "0%" }}
+                    animate={{ top: "100%" }}
+                    transition={{ duration: 4, repeat: Infinity, ease: "linear" }}
+                    className="absolute inset-x-0 h-0.5 bg-[#FF6321]/30 shadow-[0_0_15px_#FF6321] z-10 pointer-events-none"
+                  />
+                )}
+                
+                <div className="absolute inset-0 border-[20px] border-brand-sidebar/0 pointer-events-none" />
+              </div>
+            )}
+            
+            {/* HUD Overlay */}
+            {!error && stream && (
+              <div className="absolute inset-x-0 bottom-6 flex flex-col items-center gap-6 z-20">
+                <div className="flex items-center gap-3 bg-black/60 backdrop-blur-xl px-5 py-3 rounded-full border border-white/20 shadow-2xl">
+                  {/* Live Audio Control */}
+                  <div className="flex items-center gap-3 pr-4 border-r border-white/10">
+                    <button 
+                      onClick={isLiveActive ? stopLiveSession : startLiveSession}
+                      className={cn(
+                        "flex items-center gap-2.5 px-4 py-2 rounded-full transition-all text-[11px] font-black uppercase tracking-tighter",
+                        isLiveActive ? "bg-red-500/30 text-red-400 shadow-[0_0_15px_rgba(239,68,68,0.2)] border border-red-500/20" : "bg-white/10 text-white hover:bg-white/20 border border-white/5"
+                      )}
+                    >
+                      <Mic className={cn("w-4 h-4", isLiveActive ? "animate-pulse" : "")} />
+                      {liveStatus === "connecting" ? t.connecting : isLiveActive ? t.stopLive : t.startLive}
+                    </button>
+                    {isLiveActive && (
+                      <div className="flex flex-col gap-0.5">
+                        <span className="flex h-2 w-2 relative">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                          <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  <button 
+                    onClick={handleAnalyze}
+                    disabled={isAnalyzing}
+                    className={cn(
+                      "group relative w-14 h-14 rounded-full flex items-center justify-center transition-all active:scale-90 shadow-lg ml-1",
+                      isAnalyzing ? "bg-white/10 cursor-not-allowed" : "bg-[#FF6321] hover:bg-[#E5591D]"
+                    )}
+                  >
+                    {isAnalyzing ? (
+                      <RotateCcw className="w-7 h-7 text-white animate-spin" />
+                    ) : (
+                      <div className="w-10 h-10 rounded-full border-[3px] border-white group-hover:scale-105 transition-transform" />
+                    )}
+                    <span className="absolute -top-12 left-1/2 -translate-x-1/2 bg-black/90 text-white text-[10px] px-3 py-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap font-black uppercase tracking-tighter">
+                      {t.analyzeObject}
+                    </span>
+                  </button>
+                </div>
+              </div>
+            )}
+            
+            {isAnalyzing && (
+              <div className="absolute inset-0 flex flex-col items-center justify-center animate-pulse z-30 bg-brand-sidebar/40 backdrop-blur-sm">
+                <div className="relative">
+                  <div className="w-24 h-24 border-4 border-[#FF6321] border-t-transparent rounded-full animate-spin mb-6 shadow-[0_0_40px_rgba(255,99,33,0.5)]" />
+                  <Bot className="absolute inset-0 m-auto w-10 h-10 text-[#FF6321] animate-bounce" />
+                </div>
+                <p className="text-brand-text font-black text-[10px] tracking-[0.3em] bg-white dark:bg-black px-8 py-3 rounded-full shadow-2xl border border-brand-border uppercase">
+                  {t.analyzing}
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* Analysis Result Box */}
+          <div className="w-full lg:w-[450px] flex flex-col gap-4 h-[55vh] lg:h-full">
+            <div className="flex-1 bg-brand-sidebar border border-brand-border rounded-[2.5rem] p-6 shadow-2xl flex flex-col min-h-0 overflow-hidden relative">
+              <div className="flex items-center justify-between mb-6 shrink-0">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-[#FF6321]/10 flex items-center justify-center border border-[#FF6321]/20">
+                    <Bot className="w-5 h-5 text-[#FF6321]" />
+                  </div>
+                  <div>
+                    <h3 className="font-black text-sm tracking-tight opacity-90 uppercase tracking-tighter">{t.visionAssistant}</h3>
+                    <p className="text-[10px] text-brand-muted font-bold uppercase tracking-widest">{isLiveActive ? "Streaming Live" : (showFullHistory ? "Full History" : "Snapshot Mode")}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button 
+                    onClick={() => setShowFullHistory(!showFullHistory)}
+                    className={cn(
+                      "p-2.5 rounded-xl transition-all border shadow-sm flex items-center gap-1.5",
+                      showFullHistory ? "bg-[#FF6321] text-white border-[#FF6321]" : "hover:bg-brand-bg text-brand-muted border-brand-border"
+                    )}
+                    title={t.chatHistory}
+                  >
+                    <History className="w-4 h-4" />
+                    {showFullHistory && <span className="text-[10px] font-black uppercase tracking-tighter hidden md:inline">Back</span>}
+                  </button>
+                  <button 
+                    onClick={() => setVisionResult("")}
+                    className="p-2.5 hover:bg-brand-bg rounded-xl transition-all text-brand-muted border border-brand-border shadow-sm"
+                    title="Clear"
+                  >
+                    <ZapOff className="w-4 h-4" />
+                  </button>
+                  {visionResult && (
+                    <button 
+                      onClick={() => handleCopy(visionResult, 'vision')}
+                      className="p-2.5 hover:bg-brand-bg rounded-xl transition-all text-brand-muted border border-brand-border shadow-sm"
+                      title={t.copyCode}
+                    >
+                      {copiedId === 'vision' ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar text-base md:text-lg leading-relaxed text-brand-text font-medium relative">
+                {showFullHistory ? (
+                  <div className="space-y-6 pb-20">
+                    {activeSession.messages.map((msg, idx) => (
+                      <div key={idx} className={cn(
+                        "flex flex-col gap-2 p-4 rounded-2xl border",
+                        msg.role === "user" ? "bg-brand-bg border-brand-border items-end" : "bg-[#FF6321]/5 border-[#FF6321]/10 items-start"
+                      )}>
+                        <div className="flex items-center gap-2 mb-1">
+                          {msg.role === "assistant" ? <Bot className="w-3.5 h-3.5 text-[#FF6321]" /> : <UserIcon className="w-3.5 h-3.5 text-brand-muted" />}
+                          <span className="text-[9px] font-black uppercase opacity-60 tracking-widest">{msg.role}</span>
+                        </div>
+                        <div className="prose prose-xs md:prose-sm dark:prose-invert max-w-none">
+                          <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>
+                        </div>
+                      </div>
+                    ))}
+                    <div ref={resultsEndRef} />
+                  </div>
+                ) : (
+                  visionResult ? (
+                    <div className="prose prose-sm md:prose-base prose-stone dark:prose-invert max-w-none space-y-4">
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>{visionResult}</ReactMarkdown>
+                      <div ref={resultsEndRef} />
+                    </div>
+                  ) : (
+                    <div className="h-full flex flex-col items-center justify-center text-center py-20">
+                      <div className="w-20 h-20 rounded-full bg-[#FF6321]/5 flex items-center justify-center mb-6 animate-pulse">
+                        <Sparkles className="w-10 h-10 text-[#FF6321]" />
+                      </div>
+                      <p className="text-sm font-black px-10 leading-snug opacity-40 uppercase tracking-tighter">{t.visionDesc}</p>
+                    </div>
+                  )
+                )}
+              </div>
+              
+              {!isLiveActive && (
+                <div className="absolute bottom-6 left-6 right-6">
+                   <div className="bg-[#FF6321]/5 border border-[#FF6321]/10 rounded-[1.5rem] p-4 flex items-center gap-3 shadow-sm backdrop-blur-md">
+                    <div className="w-9 h-9 rounded-2xl bg-[#FF6321]/10 flex items-center justify-center shrink-0 border border-[#FF6321]/20">
+                      <Zap className="w-4 h-4 text-[#FF6321]" />
+                    </div>
+                    <p className="text-[10px] md:text-xs text-[#FF6321] font-bold leading-tight opacity-70">
+                      Tip: {t.visionDesc}
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </motion.div>
+    );
+  };
+
   const [isListening, setIsListening] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(() => {
     if (typeof window !== 'undefined') {
@@ -366,15 +878,12 @@ export default function App() {
 
     const sanitizedInput = input.trim().replace(/<[^>]*>?/gm, ''); // Basic sanitization
 
-    const messageContent = uploadedFiles.length > 0 
-      ? sanitizedInput + "\n\n" + uploadedFiles.map(f => `[File uploaded: ${f.name} (${f.type})]`).join("\n")
-      : sanitizedInput;
-
     const userMessage: Message = {
       id: Date.now().toString(),
       role: "user",
-      content: messageContent,
+      content: sanitizedInput,
       timestamp: new Date().toISOString(),
+      attachments: uploadedFiles.length > 0 ? [...uploadedFiles] : undefined,
     };
 
     setSessions((prev) => 
@@ -551,6 +1060,9 @@ export default function App() {
   const handleRestoreMessage = (msg: Message) => {
     if (msg.role === "user") {
       setInput(msg.content);
+      if (msg.attachments) {
+        setUploadedFiles(msg.attachments);
+      }
       window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
     } else {
       // Regenerate: Remove this assistant message and trigger handleSend with the last user message
@@ -559,7 +1071,7 @@ export default function App() {
       
       if (lastUserMsgIndex !== -1) {
         const actualIndex = sessionMessages.length - 1 - lastUserMsgIndex;
-        const lastUserContent = sessionMessages[actualIndex].content;
+        const lastUserMsg = sessionMessages[actualIndex];
         
         // Remove assistant message and everything after it
         const messageIndex = sessionMessages.findIndex(m => m.id === msg.id);
@@ -569,12 +1081,16 @@ export default function App() {
           s.id === activeSessionId ? { ...s, messages: filteredMessages } : s
         ));
         
-        // Trigger send with the prompt again
-        setInput(lastUserContent);
-        // We'll trust the user to hit send or we can auto-send
-        // I'll auto-send for a true "Restore/Retry" feel
+        // Restore content and attachments
+        setInput(lastUserMsg.content);
+        if (lastUserMsg.attachments) {
+          setUploadedFiles(lastUserMsg.attachments);
+        }
+
+        // Trigger send after a brief delay to allow state update or just call handleSend directly
+        // But handleSend uses state, so we might need a version that takes arguments
         setTimeout(() => {
-          handleSendWithContent(lastUserContent);
+          handleSend();
         }, 100);
       }
     }
@@ -906,6 +1422,17 @@ export default function App() {
             <div className="p-4 border-t border-brand-border space-y-1 bg-brand-sidebar text-brand-text">
               <button 
                 onClick={() => {
+                  setIsVisionOpen(true);
+                  if (window.innerWidth < 1024) setIsSidebarOpen(false);
+                }}
+                className="w-full flex items-center gap-3 px-3 py-2 text-sm text-[#FF6321] hover:bg-[#FF6321]/10 rounded-lg transition-colors font-bold"
+                title={t.visionMode}
+              >
+                <Camera className="w-4 h-4 shrink-0" />
+                {t.visionMode}
+              </button>
+              <button 
+                onClick={() => {
                   setTempSystemPrompt(activeSession.systemPrompt || DEFAULT_SYSTEM_INSTRUCTION);
                   setIsSettingsOpen(true);
                 }}
@@ -1093,12 +1620,39 @@ export default function App() {
                     msg.role === "user" ? "rounded-tr-none" : "rounded-tl-none"
                   )}>
                     <div className="prose prose-sm max-w-none prose-stone dark:prose-invert prose-pre:bg-transparent prose-pre:p-0">
-                      <ReactMarkdown 
-                        remarkPlugins={[remarkGfm]}
-                        components={MarkdownComponents}
-                      >
-                        {msg.content}
-                      </ReactMarkdown>
+                      {msg.attachments && msg.attachments.length > 0 && (
+                        <div className={cn(
+                          "flex flex-wrap gap-2 mb-3",
+                          msg.role === "user" ? "justify-end" : "justify-start"
+                        )}>
+                          {msg.attachments.map((file, idx) => (
+                            file.type.startsWith('image/') ? (
+                              <div key={idx} className="relative group/img">
+                                <img 
+                                  src={file.content} 
+                                  alt={file.name} 
+                                  className="max-w-[200px] md:max-w-[300px] rounded-xl border border-brand-border shadow-sm hover:scale-[1.02] transition-transform cursor-pointer"
+                                  referrerPolicy="no-referrer"
+                                  onClick={() => window.open(file.content, '_blank')}
+                                />
+                              </div>
+                            ) : (
+                              <div key={idx} className="flex items-center gap-2 p-2 rounded-lg bg-brand-bg border border-brand-border text-[10px] md:text-xs">
+                                <FileText className="w-3.5 h-3.5 text-[#FF6321]" />
+                                <span className="truncate max-w-[100px]">{file.name}</span>
+                              </div>
+                            )
+                          ))}
+                        </div>
+                      )}
+                      {msg.content && (
+                        <ReactMarkdown 
+                          remarkPlugins={[remarkGfm]}
+                          components={MarkdownComponents}
+                        >
+                          {msg.content}
+                        </ReactMarkdown>
+                      )}
                     </div>
 
                     {/* Action Buttons */}
@@ -1729,6 +2283,11 @@ export default function App() {
           onClick={() => setIsSidebarOpen(false)}
         />
       )}
+
+      {/* Vision Mode */}
+      <AnimatePresence>
+        {isVisionOpen && <VisionModeView />}
+      </AnimatePresence>
     </div>
   );
 }
