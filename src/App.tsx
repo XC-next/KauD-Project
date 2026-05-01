@@ -61,6 +61,17 @@ import { vscDarkPlus, vs } from "react-syntax-highlighter/dist/esm/styles/prism"
 import { createChat, summarizeMessages, DEFAULT_SYSTEM_INSTRUCTION, AVAILABLE_MODELS } from "./services/gemini";
 import { LiveAudio } from "./components/LiveAudio";
 import { LiveVideo } from "./components/LiveVideo";
+import { translations, Language } from "./translations";
+
+const getPersonaNameKey = (id: string) => {
+  switch (id) {
+    case 'creative': return 'creativePersona';
+    case 'coder': return 'coderPersona';
+    case 'analyst': return 'analystPersona';
+    case 'minimal': return 'minimalPersona';
+    default: return 'defaultPersona';
+  }
+};
 
 const PERSONAS = [
   { 
@@ -120,6 +131,9 @@ import { LogIn, LogOut, UserCircle } from "lucide-react";
 
 export default function App() {
   const { user, loading: authLoading } = useAuth();
+  
+  const initLanguage = (localStorage.getItem("kaud_language") as Language) || "km";
+  
   const [sessions, setSessions] = useState<Session[]>(() => {
     const saved = localStorage.getItem("kaud_sessions");
     if (saved) {
@@ -132,12 +146,12 @@ export default function App() {
     return [
       {
         id: "default",
-        title: "New Session",
+        title: translations[initLanguage].newSession,
         messages: [
           {
             id: "welcome",
             role: "assistant",
-            content: "សួស្តី! ខ្ញុំគឺ **KauD Assistant** ជាជំនួយការរចនាចំណេះដឹង និងឧបករណ៍ប្រើប្រាស់របស់អ្នក។ តើខ្ញុំអាចជួយអ្នកក្នុងការរចនាដំណោះស្រាយ ឬសិក្សាអំពីប្រធានបទអ្វីខ្លះនៅថ្ងៃនេះ?",
+            content: translations[initLanguage].welcomeBody,
             timestamp: new Date().toISOString(),
           },
         ],
@@ -152,6 +166,10 @@ export default function App() {
   const [theme, setTheme] = useState<string>(() => {
     return localStorage.getItem("kaud_theme") || "light";
   });
+  const [language, setLanguage] = useState<Language>(() => {
+    return (localStorage.getItem("kaud_language") as Language) || "km";
+  });
+  const t = translations[language];
   const [selectedPersona, setSelectedPersona] = useState(PERSONAS[0]);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -243,6 +261,10 @@ export default function App() {
     localStorage.setItem("kaud_theme", theme);
   }, [theme]);
 
+  useEffect(() => {
+    localStorage.setItem("kaud_language", language);
+  }, [language]);
+
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
@@ -254,12 +276,12 @@ export default function App() {
   const createNewSession = () => {
     const newSession: Session = {
       id: Date.now().toString(),
-      title: "New Session",
+      title: t.newSession,
       messages: [
         {
           id: "welcome-" + Date.now(),
           role: "assistant",
-          content: "Hello! I'm **KauD Assistant**. How can I help you today?",
+          content: t.welcomeBody,
           timestamp: new Date().toISOString(),
         },
       ],
@@ -281,12 +303,12 @@ export default function App() {
           // If all deleted, create a new one
           const newSession: Session = {
             id: Date.now().toString(),
-            title: "New Session",
+            title: t.newSession,
             messages: [
               {
                 id: "welcome-" + Date.now(),
                 role: "assistant",
-                content: "សួស្តី! ខ្ញុំគឺ **KauD Assistant**។ តើខ្ញុំអាចជួយអ្នកអ្វីខ្លះនៅថ្ងៃនេះ?",
+                content: t.welcomeBody,
                 timestamp: new Date().toISOString(),
               },
             ],
@@ -320,7 +342,7 @@ export default function App() {
   const handleVoiceInput = () => {
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SpeechRecognition) {
-      alert("កម្មវិធីរុករករបស់អ្នកមិនគាំទ្រការសម្គាល់សំឡេងទេ។");
+      alert(t.browserNoVoice);
       return;
     }
 
@@ -383,7 +405,7 @@ export default function App() {
           const newTitle = isFirstMessage ? (sanitizedInput.length > 30 ? sanitizedInput.substring(0, 30) + "..." : sanitizedInput) : s.title;
           return {
             ...s,
-            title: newTitle || "New Session",
+            title: newTitle || t.newSession,
             messages: [...s.messages, userMessage],
             lastUpdated: new Date().toISOString(),
           };
@@ -769,7 +791,7 @@ export default function App() {
               <button 
                 onClick={() => setIsSidebarOpen(false)}
                 className="p-1.5 hover:bg-brand-bg rounded-lg text-brand-text transition-all border border-brand-border shadow-sm bg-brand-bg active:scale-95 flex items-center justify-center"
-                title="បិទរបារចំហៀង"
+                title={t.closeSidebar}
               >
                 <X className="w-4 h-4 opacity-80" />
               </button>
@@ -780,7 +802,7 @@ export default function App() {
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-brand-muted" />
                 <input
                   type="text"
-                  placeholder="ស្វែងរកការជជែក..."
+                  placeholder={t.searchPlaceholder}
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="w-full pl-9 pr-4 py-2 text-xs bg-brand-bg border border-brand-border rounded-lg focus:outline-none focus:ring-1 focus:ring-[#FF6321] text-brand-text"
@@ -794,7 +816,7 @@ export default function App() {
                 className="w-full flex items-center justify-center gap-2 py-2.5 px-4 bg-[#1C1917] dark:bg-white dark:text-black text-white rounded-xl hover:opacity-90 transition-opacity font-medium"
               >
                 <Plus className="w-4 h-4" />
-                ការជជែកថ្មី
+                {t.newChat}
               </button>
               
               {/* Model Select Integrated in Sidebar */}
@@ -826,7 +848,7 @@ export default function App() {
                     <div className="p-1.5 bg-[#FF6321]/10 rounded-lg group-hover:scale-110 transition-transform">
                       <Mic className="w-3.5 h-3.5 text-[#FF6321]" />
                     </div>
-                    Audio Live
+                    {t.liveAudio}
                   </button>
                   <button 
                     onClick={() => setIsLiveVideoOpen(true)}
@@ -835,13 +857,13 @@ export default function App() {
                     <div className="p-1.5 bg-[#FF6321]/10 rounded-lg group-hover:scale-110 transition-transform">
                       <VideoIcon className="w-3.5 h-3.5 text-[#FF6321]" />
                     </div>
-                    Video Live
+                    {t.liveVideo}
                   </button>
                 </div>
               </div>
 
               <div className="px-3 mb-2 text-xs font-semibold text-brand-muted uppercase tracking-wider">
-                ការជជែកថ្មីៗ
+                {t.history}
               </div>
               {filteredSessions.map((session) => (
                 <div key={session.id} className="group relative">
@@ -897,7 +919,7 @@ export default function App() {
               ))}
               {filteredSessions.length === 0 && (
                 <div className="px-3 py-4 text-xs text-brand-muted text-center italic">
-                  No sessions found
+                  {t.noHistory}
                 </div>
               )}
             </nav>
@@ -908,17 +930,19 @@ export default function App() {
                   setTempSystemPrompt(activeSession.systemPrompt || DEFAULT_SYSTEM_INSTRUCTION);
                   setIsSettingsOpen(true);
                 }}
-                className="w-full flex items-center gap-3 px-3 py-2 text-sm text-[#44403C] hover:bg-[#F5F5F4] rounded-lg transition-colors"
+                className="w-full flex items-center gap-3 px-3 py-2 text-sm text-[#44403C] hover:bg-[#F5F5F4] dark:hover:bg-brand-bg rounded-lg transition-colors"
+                title={t.generalSettings}
               >
                 <Settings className="w-4 h-4 opacity-60" />
-                Settings
+                {t.generalSettings}
               </button>
               <button 
                 onClick={() => setIsAboutOpen(true)}
-                className="w-full flex items-center gap-3 px-3 py-2 text-sm text-[#44403C] hover:bg-[#F5F5F4] rounded-lg transition-colors"
+                className="w-full flex items-center gap-3 px-3 py-2 text-sm text-[#44403C] hover:bg-[#F5F5F4] dark:hover:bg-brand-bg rounded-lg transition-colors"
+                title={t.aboutKauda}
               >
                 <Info className="w-4 h-4 opacity-60" />
-                About KauD
+                {t.aboutKauda}
               </button>
             </div>
           </motion.aside>
@@ -934,17 +958,17 @@ export default function App() {
               <button 
                 onClick={() => setIsSidebarOpen(true)}
                 className="p-2 hover:bg-brand-sidebar bg-brand-bg border border-brand-border rounded-lg shadow-sm transition-all active:scale-95 flex items-center justify-center group"
-                title="បើករបារចំហៀង"
+                title={t.openSidebar}
               >
                 <Menu className="w-5 h-5 text-brand-text opacity-80 group-hover:opacity-100" />
               </button>
             )}
             <div className="flex items-center gap-3">
               <div className="flex flex-col">
-                <h1 className="font-semibold text-sm lg:text-base">សម័យបច្ចុប្បន្ន</h1>
+                <h1 className="font-semibold text-sm lg:text-base">{t.currentSession}</h1>
                 <p className="text-[10px] lg:text-xs text-brand-muted flex items-center gap-1">
                   <Sparkles className="w-3 h-3 text-[#FF6321]" />
-                  ដៃគូប្រឹក្សាចំណេះដឹង និងឧបករណ៍ប្រើប្រាស់
+                  {t.partnerDesc}
                 </p>
               </div>
             </div>
@@ -962,7 +986,7 @@ export default function App() {
               )}
             >
               <Zap className="w-3.5 h-3.5 text-[#FF6321]" />
-              {isSummarizing ? "កំពុងសង្ខេប..." : "សង្ខេប"}
+              {isSummarizing ? t.summarizing : t.summarize}
             </button>
             
             {user ? (
@@ -1001,7 +1025,7 @@ export default function App() {
                 <Info className="w-3 h-3" />
               </div>
               <div className="flex-1 text-[#9A3412] leading-relaxed">
-                <span className="font-bold mr-1 uppercase text-[10px] tracking-wider">សេចក្តីសង្ខេបនៃសម័យជជែក:</span>
+                <span className="font-bold mr-1 uppercase text-[10px] tracking-wider">{t.sessionSummary}</span>
                 {activeSession.summary}
               </div>
               <button 
@@ -1037,8 +1061,8 @@ export default function App() {
                     transition={{ delay: 0.1 }}
                     className="text-4xl md:text-5xl font-black tracking-tighter text-brand-text flex flex-wrap justify-center gap-x-3"
                   >
-                    <span>តើខ្ញុំអាចជួយអ្វីខ្លះ</span> 
-                    <span className="text-[#FF6321]">ថ្ងៃនេះ?</span>
+                    <span>{t.howCanIHelp}</span> 
+                    <span className="text-[#FF6321]">{t.today}</span>
                   </motion.h2>
                   <motion.p 
                     initial={{ y: 20, opacity: 0 }}
@@ -1046,7 +1070,7 @@ export default function App() {
                     transition={{ delay: 0.2 }}
                     className="text-brand-muted text-lg font-medium max-w-md mx-auto"
                   >
-                    ជំនួយការបច្ចេកទេស កម្រិតខ្ពស់សម្រាប់គ្រប់ការងាររបស់អ្នក។
+                    {t.technicalAssistant}
                   </motion.p>
                 </div>
 
@@ -1057,14 +1081,14 @@ export default function App() {
                   className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full pt-8"
                 >
                   {[
-                    { title: "Creative Logic", desc: "សរសេរកូដ និងដោះស្រាយបញ្ហា", icon: <Terminal className="w-5 h-5" /> },
-                    { title: "Smart Summary", desc: "សង្ខេបខ្លឹមសារអត្ថបទវែងៗ", icon: <Zap className="w-5 h-5" /> },
-                    { title: "Technical Vision", desc: "វិភាគរូបភាព និងឯកសារ", icon: <ImageIcon className="w-5 h-5" /> },
-                    { title: "Neural Chat", desc: "ជជែកកម្សាន្ត និងពិភាក្សា", icon: <Layers className="w-5 h-5" /> }
+                    { title: "Creative Logic", desc: t.feature1Desc, icon: <Terminal className="w-5 h-5" /> },
+                    { title: "Smart Summary", desc: t.feature2Desc, icon: <Zap className="w-5 h-5" /> },
+                    { title: "Technical Vision", desc: t.feature3Desc, icon: <ImageIcon className="w-5 h-5" /> },
+                    { title: "Neural Chat", desc: t.feature4Desc, icon: <Layers className="w-5 h-5" /> }
                   ].map((feature, i) => (
                     <button
                       key={i}
-                      onClick={() => setInput(`សូមប្រាប់ខ្ញុំបន្ថែមអំពី ${feature.title}`)}
+                      onClick={() => setInput(`${t.tellMeMore}${feature.title}`)}
                       className="group p-6 bg-brand-sidebar border border-brand-border rounded-[2rem] text-left hover:border-[#FF6321] hover:bg-brand-bg transition-all active:scale-95 flex flex-col gap-3 shadow-sm"
                     >
                       <div className="w-10 h-10 rounded-xl bg-brand-bg border border-brand-border flex items-center justify-center text-[#FF6321] group-hover:scale-110 group-hover:bg-[#FF6321]/10 transition-all">
@@ -1235,7 +1259,7 @@ export default function App() {
 
             {/* Persona Selector */}
             <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar persona-selector-container">
-              <span className="text-[10px] font-bold uppercase tracking-widest text-brand-muted shrink-0 mr-1">បុគ្កលិកលក្ខណៈ:</span>
+              <span className="text-[10px] font-bold uppercase tracking-widest text-brand-muted shrink-0 mr-1">{t.personaPrefix}</span>
               {PERSONAS.map((p) => (
                 <button
                   key={p.id}
@@ -1248,7 +1272,7 @@ export default function App() {
                   )}
                 >
                   {p.icon}
-                  {p.name}
+                  {t[getPersonaNameKey(p.id) as keyof typeof t] || p.name}
                 </button>
               ))}
             </div>
@@ -1269,7 +1293,7 @@ export default function App() {
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder="សួរសំណួរទៅកាន់ KauD Assistant..."
+                placeholder={t.sendMsg}
                 className="flex-1 bg-transparent border-none focus:ring-0 resize-none py-3 px-4 text-sm min-h-[52px] max-h-[200px] text-brand-text font-medium leading-relaxed"
                 rows={1}
               />
@@ -1278,7 +1302,7 @@ export default function App() {
                   <button 
                     onClick={() => setIsQuickActionsOpen(!isQuickActionsOpen)}
                     className="p-2.5 text-brand-muted hover:bg-brand-bg hover:text-[#FF6321] rounded-xl transition-colors"
-                    title="សកម្មភាពរហ័ស (Quick Actions)"
+                    title={t.quickActions}
                   >
                     <Zap className="w-5 h-5" />
                   </button>
@@ -1296,7 +1320,7 @@ export default function App() {
                             className="w-full flex items-center gap-3 px-3 py-2 text-sm text-brand-text hover:bg-brand-bg hover:text-[#FF6321] rounded-xl transition-all text-left"
                           >
                             <Plus className="w-4 h-4" />
-                            ការជជែកថ្មី (New Chat)
+                            {t.newChat}
                           </button>
                           <button 
                             onClick={() => { handleSummarize(); setIsQuickActionsOpen(false); }}
@@ -1304,7 +1328,7 @@ export default function App() {
                             className="w-full flex items-center gap-3 px-3 py-2 text-sm text-brand-text hover:bg-brand-bg hover:text-[#FF6321] rounded-xl transition-all text-left disabled:opacity-50 disabled:cursor-not-allowed"
                           >
                             <FileText className="w-4 h-4" />
-                            សង្ខេប (Summarize)
+                            {t.summarize}
                           </button>
                           <button 
                             onClick={() => { 
@@ -1315,7 +1339,7 @@ export default function App() {
                             className="w-full flex items-center gap-3 px-3 py-2 text-sm text-brand-text hover:bg-brand-bg hover:text-[#FF6321] rounded-xl transition-all text-left"
                           >
                             <UserCircle className="w-4 h-4" />
-                            ប្តូរបុគ្គលិកលក្ខណៈ (Persona)
+                            {t.changePersona}
                           </button>
                         </div>
                       </motion.div>
@@ -1328,14 +1352,14 @@ export default function App() {
                     "p-2.5 rounded-xl transition-all",
                     isListening ? "bg-red-500 text-white animate-pulse" : "text-brand-muted hover:bg-brand-bg"
                   )}
-                  title="Voice Typing"
+                  title={t.voiceTyping}
                 >
                   <Mic className="w-5 h-5" />
                 </button>
                 <button 
                   onClick={() => fileInputRef.current?.click()}
                   className="p-2.5 text-brand-muted hover:bg-brand-bg rounded-xl transition-colors"
-                  title="Upload File"
+                  title={t.uploadFile}
                 >
                   <Paperclip className="w-5 h-5" />
                 </button>
@@ -1343,7 +1367,7 @@ export default function App() {
                   <button
                     onClick={handleStopGeneration}
                     className="p-2.5 rounded-xl bg-red-500/10 text-red-500 hover:bg-red-500/20 transition-all shadow-sm"
-                    title="Stop Generation"
+                    title={t.stopGen}
                   >
                     <Square className="w-5 h-5 fill-current" />
                   </button>
@@ -1364,7 +1388,7 @@ export default function App() {
               </div>
             </div>
             <p className="text-[10px] text-center mt-3 text-brand-muted">
-              KauD Assistant អាចមានកំហុស។ សូមផ្ទៀងផ្ទាត់ព័ត៌មានសំខាន់ៗ។
+              {t.disclaimer}
             </p>
           </div>
         </div>
@@ -1388,7 +1412,7 @@ export default function App() {
               className="relative w-full max-w-lg bg-brand-sidebar border border-brand-border rounded-3xl shadow-2xl overflow-hidden text-brand-text flex flex-col max-h-[90vh]"
             >
               <div className="px-5 py-4 sm:px-6 border-b border-brand-border flex items-center justify-between shrink-0">
-                <h2 className="text-lg font-bold">ការកំណត់ទូទៅ</h2>
+                <h2 className="text-lg font-bold">{t.generalSettings}</h2>
                 <button 
                   onClick={() => setIsSettingsOpen(false)}
                   className="p-2 hover:bg-brand-bg rounded-full transition-colors"
@@ -1399,27 +1423,57 @@ export default function App() {
               <div className="p-5 sm:p-6 space-y-6 overflow-y-auto flex-1">
                 <div className="space-y-3">
                   <label className="text-sm font-semibold flex items-center gap-2 uppercase tracking-wider text-brand-muted">
-                    រូបរាង
+                    {t.language}
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      onClick={() => setLanguage('km')}
+                      className={cn(
+                        "flex items-center gap-2 p-3 rounded-xl border transition-all text-xs font-bold",
+                        language === 'km' 
+                          ? "border-[#FF6321] bg-[#FF6321]/10 text-[#FF6321] ring-1 ring-[#FF6321]" 
+                          : "border-brand-border hover:bg-brand-bg"
+                      )}
+                    >
+                      ខ្មែរ
+                    </button>
+                    <button
+                      onClick={() => setLanguage('en')}
+                      className={cn(
+                        "flex items-center gap-2 p-3 rounded-xl border transition-all text-xs font-bold",
+                        language === 'en' 
+                          ? "border-[#FF6321] bg-[#FF6321]/10 text-[#FF6321] ring-1 ring-[#FF6321]" 
+                          : "border-brand-border hover:bg-brand-bg"
+                      )}
+                    >
+                      English
+                    </button>
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  <label className="text-sm font-semibold flex items-center gap-2 uppercase tracking-wider text-brand-muted">
+                    {t.appearance}
                   </label>
                   <div className="grid grid-cols-2 gap-2">
                     {[
-                      { id: 'light', name: 'ពន្លឺ', color: 'bg-[#F5F5F4]' },
-                      { id: 'dark', name: 'ងងឹត', color: 'bg-[#0C0A09]' },
-                      { id: 'midnight', name: 'ពណ៌ខៀវអធ្រាត្រ', color: 'bg-[#020617]' },
-                      { id: 'forest', name: 'ព្រៃឈើ', color: 'bg-[#052e16]' }
-                    ].map((t) => (
+                      { id: 'light', name: t.themeLight, color: 'bg-[#F5F5F4]' },
+                      { id: 'dark', name: t.themeDark, color: 'bg-[#0C0A09]' },
+                      { id: 'midnight', name: t.themeMidnight, color: 'bg-[#020617]' },
+                      { id: 'forest', name: t.themeForest, color: 'bg-[#052e16]' }
+                    ].map((themeOpt) => (
                       <button
-                        key={t.id}
-                        onClick={() => setTheme(t.id)}
+                        key={themeOpt.id}
+                        onClick={() => setTheme(themeOpt.id)}
                         className={cn(
                           "flex items-center gap-2 p-2 rounded-xl border transition-all text-xs font-medium",
-                          theme === t.id 
+                          theme === themeOpt.id 
                             ? "border-[#FF6321] bg-brand-bg ring-1 ring-[#FF6321]" 
                             : "border-brand-border hover:bg-brand-bg"
                         )}
                       >
-                        <div className={cn("w-4 h-4 rounded-full border border-white/20", t.color)} />
-                        {t.name}
+                        <div className={cn("w-4 h-4 rounded-full border border-white/20", themeOpt.color)} />
+                        {themeOpt.name}
                       </button>
                     ))}
                   </div>
@@ -1427,14 +1481,14 @@ export default function App() {
 
                 <div className="space-y-2">
                   <label className="text-sm font-semibold flex items-center gap-2 uppercase tracking-wider text-brand-muted">
-                    ការណែនាំសម្រាប់សម័យជជែក
+                    {t.sysPrompt}
                   </label>
-                  <p className="text-[10px] text-brand-muted">តើអ្នកចង់ឱ្យជំនួយការមានឥរិយាបទបែបណានៅក្នុងការជជែកនេះ?</p>
+                  <p className="text-[10px] text-brand-muted">{t.sysPromptDesc}</p>
                   <textarea
                     value={tempSystemPrompt}
                     onChange={(e) => setTempSystemPrompt(e.target.value)}
                     className="w-full h-32 p-4 text-sm bg-brand-bg border border-brand-border rounded-xl focus:ring-1 focus:ring-[#FF6321] outline-none transition-all resize-none text-brand-text"
-                    placeholder="Enter system instructions..."
+                    placeholder={t.sysPromptPlaceholder}
                   />
                 </div>
                 <div className="flex justify-end gap-3">
@@ -1442,13 +1496,13 @@ export default function App() {
                     onClick={() => setIsSettingsOpen(false)}
                     className="px-4 py-2 text-sm font-medium text-brand-muted hover:bg-brand-bg rounded-xl transition-colors"
                   >
-                    Cancel
+                    {language === 'km' ? 'បោះបង់' : 'Cancel'}
                   </button>
                   <button 
                     onClick={handleUpdateSystemPrompt}
                     className="px-6 py-2 text-sm font-bold bg-[#FF6321] text-white rounded-xl hover:opacity-90 transition-all shadow-md active:scale-95"
                   >
-                    Save Changes
+                    {t.saveChanges}
                   </button>
                 </div>
               </div>
@@ -1509,7 +1563,7 @@ export default function App() {
                     <div className="relative">
                       <Quote className="absolute -top-6 -left-6 w-12 h-12 text-white/5" />
                       <p className="text-lg md:text-xl font-medium leading-relaxed bg-gradient-to-r from-white to-white/60 bg-clip-text text-transparent">
-                        "យើងបង្កើត KauD ដើម្បីក្លាយជាដៃគូបញ្ញាសិប្បនិម្មិតដ៏ឆ្លាតវៃបំផុត ដែលយល់អំពីបរិបទកម្ពុជា និងជួយសម្រួលដល់ការងារប្រចាំថ្ងៃរបស់អ្នកឱ្យកាន់តែប្រសើរ។"
+                        {t.kaudMission}
                       </p>
                     </div>
 
@@ -1614,7 +1668,7 @@ export default function App() {
                   className="absolute top-4 left-4 md:top-8 md:left-8 flex items-center gap-1.5 md:gap-2 px-3 py-1.5 md:px-4 md:py-2 rounded-full bg-white/5 border border-white/10 hover:bg-white/10 transition-all text-white/70 hover:text-white font-bold text-[10px] md:text-xs uppercase tracking-widest"
                 >
                   <ArrowLeft className="w-3 h-3 md:w-4 md:h-4" />
-                  ថយក្រោយ
+                  {t.back}
                 </button>
 
                 <button 
